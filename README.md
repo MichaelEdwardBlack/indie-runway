@@ -27,6 +27,8 @@ npm test
 npm run build
 ```
 
-## Provisional model conventions
+## Model conventions
 
-Several source spreadsheet behaviors still need confirmation from Cam. Until then, the engine explicitly treats marketing as a one-month-lagged percentage of gross profit, prevents immediate tax benefits from operating losses, includes DLC and cosmetics in total revenue, and groups pre-launch costs at launch.
+The initial model intentionally stays simple and uses a fixed 24-month post-launch projection. Development costs continue throughout that projection, pre-launch G&A includes the previously omitted $100 miscellaneous expense, and investment needed means the total cost required to reach launch. Refunds, discounts, regional pricing, and VAT are reserved for a future version.
+
+Several spreadsheet behaviors still need confirmation from Cam. Until then, the engine treats marketing as a one-month-lagged percentage of gross profit, prevents immediate tax benefits from operating losses, includes DLC and cosmetics in total revenue, and groups pre-launch costs at launch.

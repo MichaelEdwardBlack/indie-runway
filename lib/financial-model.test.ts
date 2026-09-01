@@ -4,8 +4,9 @@ import { calculateModel, DEFAULT_ASSUMPTIONS } from './financial-model';
 describe('financial model', () => {
   it('reconciles Cam baseline pre-launch investment', () => {
     const result = calculateModel();
-    expect(result.initialInvestment).toBe(44499);
-    expect(result.months[0].cash).toBe(DEFAULT_ASSUMPTIONS.startingCapital - 44499);
+    expect(result.initialInvestment).toBe(44599);
+    expect(result.fundingNeeded).toBe(44599);
+    expect(result.months[0].cash).toBe(DEFAULT_ASSUMPTIONS.startingCapital - 44599);
   });
 
   it('keeps platform allocation and weighted fees auditable', () => {
@@ -27,5 +28,11 @@ describe('financial model', () => {
     expect(result.months[4].dlcRevenue).toBeGreaterThan(0);
     expect(result.months[4].cosmeticsRevenue).toBeGreaterThan(0);
     expect(result.months[4].totalRevenue).toBeGreaterThan(result.months[4].baseRevenue);
+  });
+
+  it('keeps the initial two-year horizon and development spend throughout it', () => {
+    const result = calculateModel();
+    expect(result.months).toHaveLength(25);
+    expect(result.months.slice(1).every((month) => month.development === DEFAULT_ASSUMPTIONS.monthlyDevelopment)).toBe(true);
   });
 });

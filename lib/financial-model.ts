@@ -67,7 +67,7 @@ export const DEFAULT_ASSUMPTIONS: ModelAssumptions = {
   prelaunchDevelopment: 17100,
   prelaunchMarketing: 10000,
   prelaunchSalaries: 17000,
-  prelaunchGA: 399,
+  prelaunchGA: 499,
   monthlyDevelopment: 1240,
   monthlyGA: 110,
   platforms: [
@@ -174,13 +174,12 @@ export function calculateModel(overrides: Partial<ModelAssumptions> = {}): Model
     previousGrossProfit = grossProfit;
   }
 
-  const minimumCumulativeIncome = Math.min(...months.map((month) => month.cumulativeNetIncome));
   const breakEven = months.find((month) => month.monthIndex > 0 && month.cumulativeNetIncome >= 0);
   return {
     assumptions,
     months,
     initialInvestment: prelaunchCost,
-    fundingNeeded: Math.max(0, -minimumCumulativeIncome),
+    fundingNeeded: prelaunchCost,
     breakEvenMonth: breakEven?.monthIndex ?? null,
     endingCash: months.at(-1)?.cash ?? assumptions.startingCapital,
     peakCash: Math.max(...months.map((month) => month.cash)),
@@ -190,6 +189,10 @@ export function calculateModel(overrides: Partial<ModelAssumptions> = {}): Model
 }
 
 export const MODEL_CONVENTIONS = {
+  projection: 'The model projects 24 post-launch months. The horizon can become adjustable in a future version.',
+  investmentNeeded: 'Investment needed means the cost required to reach launch, not the largest later cash shortfall.',
+  development: 'Post-launch development costs continue for every month in the projection.',
+  complexity: 'Refunds, discounts, regional pricing, and VAT are intentionally out of scope for the initial simple model.',
   marketingTiming: 'Marketing spend is 10% of the prior month gross profit, matching the spreadsheet timing.',
   taxLosses: 'Operating losses do not create an immediate cash tax benefit.',
   addOns: 'DLC and cosmetics revenue are included in total revenue and storefront fees.',
