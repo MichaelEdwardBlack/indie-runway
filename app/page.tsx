@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import {
   ArrowUpRight,
@@ -267,13 +267,47 @@ export default function Home() {
   const [view, setView] = useState<ViewId>('overview');
   const [helpOpen, setHelpOpen] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [shared, setShared] = useState(false);
+  const [shareNotice, setShareNotice] = useState<'copied' | 'error' | null>(
+    null,
+  );
   const [scenarioOpen, setScenarioOpen] = useState(false);
   const [visualTheme, setVisualTheme] = useState<VisualTheme>('runway');
   const [scenarios, setScenarios] = useState<LocalScenario[]>([]);
   const [activeScenarioId, setActiveScenarioId] = useState('');
   const [scenarioName, setScenarioName] = useState("Cam's baseline");
   const [deleteScenarioId, setDeleteScenarioId] = useState<string | null>(null);
+  const scenarioWrapRef = useRef<HTMLDivElement>(null);
+  const shareNoticeTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    function closeScenarioPopover(event: PointerEvent) {
+      if (
+        scenarioWrapRef.current &&
+        !scenarioWrapRef.current.contains(event.target as Node)
+      ) {
+        setScenarioOpen(false);
+        setDeleteScenarioId(null);
+      }
+    }
+
+    function closeScenarioPopoverWithKeyboard(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setScenarioOpen(false);
+        setDeleteScenarioId(null);
+      }
+    }
+
+    document.addEventListener('pointerdown', closeScenarioPopover);
+    document.addEventListener('keydown', closeScenarioPopoverWithKeyboard);
+    return () => {
+      document.removeEventListener('pointerdown', closeScenarioPopover);
+      document.removeEventListener('keydown', closeScenarioPopoverWithKeyboard);
+      if (shareNoticeTimerRef.current) {
+        window.clearTimeout(shareNoticeTimerRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const legacyRaw = window.localStorage.getItem(LEGACY_DRAFT_STORAGE_KEY);
@@ -541,10 +575,31 @@ export default function Home() {
       url.searchParams.set(`${platform.id}Fee`, String(platform.feePct));
     });
     url.searchParams.set('team', JSON.stringify(settings.team));
-    window.history.replaceState({}, '', url);
-    await navigator.clipboard?.writeText(url.toString());
-    setShared(true);
-    window.setTimeout(() => setShared(false), 2200);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url.toString());
+      } else {
+        const copyField = document.createElement('textarea');
+        copyField.value = url.toString();
+        copyField.style.position = 'fixed';
+        copyField.style.opacity = '0';
+        document.body.appendChild(copyField);
+        copyField.select();
+        const copied = document.execCommand('copy');
+        copyField.remove();
+        if (!copied) throw new Error('Copy command failed');
+      }
+      setShareNotice('copied');
+    } catch {
+      setShareNotice('error');
+    }
+    if (shareNoticeTimerRef.current) {
+      window.clearTimeout(shareNoticeTimerRef.current);
+    }
+    shareNoticeTimerRef.current = window.setTimeout(
+      () => setShareNotice(null),
+      2800,
+    );
   }
   function toggleVisualTheme() {
     setVisualTheme((current) => {
@@ -572,7 +627,7 @@ export default function Home() {
               <small>Studio financial planner</small>
             </div>
           </div>
-          <div className="scenario-wrap">
+          <div className="scenario-wrap" ref={scenarioWrapRef}>
             <MotionButton
               className="scenario-switcher"
               tone="soft"
@@ -751,9 +806,9 @@ export default function Home() {
               tone="primary"
               onClick={shareScenario}
             >
-              {shared ? <Check /> : <Sparkles />}
-              <span>{shared ? 'Link copied' : 'Share scenario'}</span>
-              {!shared && <ArrowUpRight className="share-arrow" />}
+              <Sparkles />
+              <span>Share scenario</span>
+              <ArrowUpRight className="share-arrow" />
             </MotionButton>
           </div>
         </header>
@@ -911,6 +966,35 @@ export default function Home() {
         </div>
         <AnimatePresence>
           {helpOpen && <HelpPanel close={() => setHelpOpen(false)} />}
+        </AnimatePresence>
+        <AnimatePresence>
+          {shareNotice && (
+            <motion.div
+              className={`share-toast ${shareNotice === 'error' ? 'is-error' : ''}`}
+              role="status"
+              aria-live="polite"
+              initial={{ opacity: 0, y: 18, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 440, damping: 30 }}
+            >
+              <span className="share-toast-icon">
+                {shareNotice === 'copied' ? <Check /> : <X />}
+              </span>
+              <span>
+                <strong>
+                  {shareNotice === 'copied'
+                    ? 'Share link copied'
+                    : 'Couldn’t copy the link'}
+                </strong>
+                <small>
+                  {shareNotice === 'copied'
+                    ? 'Paste it into a message whenever you’re ready.'
+                    : 'Check your browser’s clipboard permission and try again.'}
+                </small>
+              </span>
+            </motion.div>
+          )}
         </AnimatePresence>
       </main>
     </MotionConfig>
