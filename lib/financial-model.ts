@@ -14,6 +14,19 @@ export type TeamMemberAssumption = {
   endMonth: number | null;
 };
 
+export type PrelaunchGACosts = {
+  llc: number;
+  steamHosting: number;
+  misc: number;
+};
+
+export type MonthlyGACosts = {
+  legal: number;
+  software: number;
+  insurance: number;
+  misc: number;
+};
+
 export type ModelAssumptions = {
   startingCapital: number;
   gamePrice: number;
@@ -27,8 +40,10 @@ export type ModelAssumptions = {
   prelaunchMarketing: number;
   prelaunchSalaries: number;
   prelaunchGA: number;
+  prelaunchGACosts: PrelaunchGACosts;
   monthlyDevelopment: number;
   monthlyGA: number;
+  monthlyGACosts: MonthlyGACosts;
   payrollTaxPct: number;
   team: TeamMemberAssumption[];
   platforms: PlatformAssumption[];
@@ -81,8 +96,19 @@ export const DEFAULT_ASSUMPTIONS: ModelAssumptions = {
   prelaunchMarketing: 10000,
   prelaunchSalaries: 17000,
   prelaunchGA: 499,
+  prelaunchGACosts: {
+    llc: 299,
+    steamHosting: 100,
+    misc: 100,
+  },
   monthlyDevelopment: 1240,
   monthlyGA: 110,
+  monthlyGACosts: {
+    legal: 20,
+    software: 50,
+    insurance: 20,
+    misc: 20,
+  },
   payrollTaxPct: 20,
   team: [
     {
@@ -161,6 +187,14 @@ export function calculateModel(
   const mergedAssumptions: ModelAssumptions = {
     ...DEFAULT_ASSUMPTIONS,
     ...overrides,
+    prelaunchGACosts: {
+      ...DEFAULT_ASSUMPTIONS.prelaunchGACosts,
+      ...overrides.prelaunchGACosts,
+    },
+    monthlyGACosts: {
+      ...DEFAULT_ASSUMPTIONS.monthlyGACosts,
+      ...overrides.monthlyGACosts,
+    },
     team: overrides.team ?? DEFAULT_ASSUMPTIONS.team,
     platforms: overrides.platforms ?? DEFAULT_ASSUMPTIONS.platforms,
   };
@@ -169,6 +203,14 @@ export function calculateModel(
     .reduce((total, member) => total + member.annualSalary / 12, 0);
   const assumptions: ModelAssumptions = {
     ...mergedAssumptions,
+    prelaunchGA: Object.values(mergedAssumptions.prelaunchGACosts).reduce(
+      (total, cost) => total + cost,
+      0,
+    ),
+    monthlyGA: Object.values(mergedAssumptions.monthlyGACosts).reduce(
+      (total, cost) => total + cost,
+      0,
+    ),
     prelaunchSalaries: Math.round(
       prelaunchMonthlyWages *
         mergedAssumptions.prelaunchMonths *
@@ -302,6 +344,8 @@ export const MODEL_CONVENTIONS = {
     'Investment needed means the cost required to reach launch, not the largest later cash shortfall.',
   development:
     'Post-launch development costs continue for every month in the projection.',
+  generalAndAdministrative:
+    'Pre-revenue G&A is the sum of LLC formation, Steam hosting, and miscellaneous setup costs. Monthly G&A is the sum of legal, software, insurance, and miscellaneous recurring costs.',
   complexity:
     'Refunds, discounts, regional pricing, and VAT are intentionally out of scope for the initial simple model.',
   marketingTiming:

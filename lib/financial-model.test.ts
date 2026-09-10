@@ -11,6 +11,27 @@ describe('financial model', () => {
     );
   });
 
+  it('calculates G&A totals from their editable line items', () => {
+    const result = calculateModel({
+      prelaunchGACosts: {
+        llc: 350,
+        steamHosting: 125,
+        misc: 75,
+      },
+      monthlyGACosts: {
+        legal: 40,
+        software: 80,
+        insurance: 30,
+        misc: 25,
+      },
+    });
+
+    expect(result.assumptions.prelaunchGA).toBe(550);
+    expect(result.months[0].generalAndAdministrative).toBe(550);
+    expect(result.assumptions.monthlyGA).toBe(175);
+    expect(result.months[1].generalAndAdministrative).toBe(175);
+  });
+
   it('keeps platform allocation and weighted fees auditable', () => {
     const result = calculateModel();
     const platformShare = result.assumptions.platforms.reduce(

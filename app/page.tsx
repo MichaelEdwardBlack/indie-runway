@@ -40,7 +40,9 @@ import {
   MODEL_CONVENTIONS,
   type ModelAssumptions,
   type ModelResult,
+  type MonthlyGACosts,
   type PlatformAssumption,
+  type PrelaunchGACosts,
   type TeamMemberAssumption,
 } from '@/lib/financial-model';
 
@@ -79,13 +81,15 @@ type NumericSettingKey =
   | 'marketingPct'
   | 'prelaunchDevelopment'
   | 'prelaunchMarketing'
-  | 'prelaunchGA'
   | 'monthlyDevelopment'
-  | 'monthlyGA'
   | 'payrollTaxPct';
 type ScenarioSettings = Pick<
   ModelAssumptions,
-  NumericSettingKey | 'platforms' | 'team'
+  | NumericSettingKey
+  | 'platforms'
+  | 'team'
+  | 'prelaunchGACosts'
+  | 'monthlyGACosts'
 >;
 type ScenarioValues = {
   price: number;
@@ -106,10 +110,19 @@ const numericSettingParams: Array<[NumericSettingKey, string]> = [
   ['marketingPct', 'marketing'],
   ['prelaunchDevelopment', 'preDev'],
   ['prelaunchMarketing', 'preMarketing'],
-  ['prelaunchGA', 'preGA'],
   ['monthlyDevelopment', 'monthlyDev'],
-  ['monthlyGA', 'monthlyGA'],
   ['payrollTaxPct', 'payrollTax'],
+];
+const prelaunchGAParams: Array<[keyof PrelaunchGACosts, string]> = [
+  ['llc', 'preGaLlc'],
+  ['steamHosting', 'preGaSteam'],
+  ['misc', 'preGaMisc'],
+];
+const monthlyGAParams: Array<[keyof MonthlyGACosts, string]> = [
+  ['legal', 'gaLegal'],
+  ['software', 'gaSoftware'],
+  ['insurance', 'gaInsurance'],
+  ['misc', 'gaMisc'],
 ];
 const defaultScenarioSettings = (): ScenarioSettings => ({
   startingCapital: DEFAULT_ASSUMPTIONS.startingCapital,
@@ -117,9 +130,9 @@ const defaultScenarioSettings = (): ScenarioSettings => ({
   marketingPct: DEFAULT_ASSUMPTIONS.marketingPct,
   prelaunchDevelopment: DEFAULT_ASSUMPTIONS.prelaunchDevelopment,
   prelaunchMarketing: DEFAULT_ASSUMPTIONS.prelaunchMarketing,
-  prelaunchGA: DEFAULT_ASSUMPTIONS.prelaunchGA,
+  prelaunchGACosts: { ...DEFAULT_ASSUMPTIONS.prelaunchGACosts },
   monthlyDevelopment: DEFAULT_ASSUMPTIONS.monthlyDevelopment,
-  monthlyGA: DEFAULT_ASSUMPTIONS.monthlyGA,
+  monthlyGACosts: { ...DEFAULT_ASSUMPTIONS.monthlyGACosts },
   payrollTaxPct: DEFAULT_ASSUMPTIONS.payrollTaxPct,
   team: DEFAULT_ASSUMPTIONS.team.map((member) => ({ ...member })),
   platforms: DEFAULT_ASSUMPTIONS.platforms.map((platform) => ({ ...platform })),
@@ -130,22 +143,58 @@ const LEGACY_DRAFT_STORAGE_KEY = 'indie-runway-draft';
 
 const cloneSettings = (settings: ScenarioSettings): ScenarioSettings => ({
   ...settings,
+  prelaunchGACosts: { ...settings.prelaunchGACosts },
+  monthlyGACosts: { ...settings.monthlyGACosts },
   team: settings.team.map((member) => ({ ...member })),
   platforms: settings.platforms.map((platform) => ({ ...platform })),
 });
 
 const normalizeSettings = (
-  settings?: Partial<ScenarioSettings>,
-): ScenarioSettings => ({
-  ...defaultScenarioSettings(),
-  ...settings,
-  team: settings?.team
-    ? settings.team.map((member) => ({ ...member }))
-    : defaultScenarioSettings().team,
-  platforms: settings?.platforms
-    ? settings.platforms.map((platform) => ({ ...platform }))
-    : defaultScenarioSettings().platforms,
-});
+  settings?: Partial<ModelAssumptions>,
+): ScenarioSettings => {
+  const defaults = defaultScenarioSettings();
+  const legacyPrelaunchAdjustment =
+    settings?.prelaunchGA === undefined
+      ? 0
+      : settings.prelaunchGA - DEFAULT_ASSUMPTIONS.prelaunchGA;
+  const legacyMonthlyAdjustment =
+    settings?.monthlyGA === undefined
+      ? 0
+      : settings.monthlyGA - DEFAULT_ASSUMPTIONS.monthlyGA;
+  return {
+    startingCapital: settings?.startingCapital ?? defaults.startingCapital,
+    incomeTaxPct: settings?.incomeTaxPct ?? defaults.incomeTaxPct,
+    marketingPct: settings?.marketingPct ?? defaults.marketingPct,
+    prelaunchDevelopment:
+      settings?.prelaunchDevelopment ?? defaults.prelaunchDevelopment,
+    prelaunchMarketing:
+      settings?.prelaunchMarketing ?? defaults.prelaunchMarketing,
+    monthlyDevelopment:
+      settings?.monthlyDevelopment ?? defaults.monthlyDevelopment,
+    payrollTaxPct: settings?.payrollTaxPct ?? defaults.payrollTaxPct,
+    prelaunchGACosts: settings?.prelaunchGACosts
+      ? {
+          ...defaults.prelaunchGACosts,
+          ...settings.prelaunchGACosts,
+        }
+      : {
+          ...defaults.prelaunchGACosts,
+          misc: defaults.prelaunchGACosts.misc + legacyPrelaunchAdjustment,
+        },
+    monthlyGACosts: settings?.monthlyGACosts
+      ? { ...defaults.monthlyGACosts, ...settings.monthlyGACosts }
+      : {
+          ...defaults.monthlyGACosts,
+          misc: defaults.monthlyGACosts.misc + legacyMonthlyAdjustment,
+        },
+    team: settings?.team
+      ? settings.team.map((member) => ({ ...member }))
+      : defaults.team,
+    platforms: settings?.platforms
+      ? settings.platforms.map((platform) => ({ ...platform }))
+      : defaults.platforms,
+  };
+};
 
 const makeScenario = (
   name: string,
@@ -232,7 +281,7 @@ export default function Home() {
       price?: number;
       launchUnits?: number;
       decline?: number;
-      settings?: Partial<ScenarioSettings>;
+      settings?: Partial<ModelAssumptions>;
     } = {};
     try {
       legacyDraft = legacyRaw ? JSON.parse(legacyRaw) : {};
@@ -300,6 +349,18 @@ export default function Home() {
       const value = Number(params.get(param));
       if (Number.isFinite(value) && params.has(param))
         nextSettings[key] = value;
+    });
+    prelaunchGAParams.forEach(([key, param]) => {
+      const value = Number(params.get(param));
+      if (Number.isFinite(value) && params.has(param)) {
+        nextSettings.prelaunchGACosts[key] = value;
+      }
+    });
+    monthlyGAParams.forEach(([key, param]) => {
+      const value = Number(params.get(param));
+      if (Number.isFinite(value) && params.has(param)) {
+        nextSettings.monthlyGACosts[key] = value;
+      }
     });
     nextSettings.platforms = nextSettings.platforms.map((platform) => {
       const share = Number(params.get(`${platform.id}Share`));
@@ -465,6 +526,12 @@ export default function Home() {
     url.searchParams.set('scenario', scenarioName.trim());
     numericSettingParams.forEach(([key, param]) =>
       url.searchParams.set(param, String(settings[key])),
+    );
+    prelaunchGAParams.forEach(([key, param]) =>
+      url.searchParams.set(param, String(settings.prelaunchGACosts[key])),
+    );
+    monthlyGAParams.forEach(([key, param]) =>
+      url.searchParams.set(param, String(settings.monthlyGACosts[key])),
     );
     settings.platforms.forEach((platform) => {
       url.searchParams.set(
@@ -818,6 +885,15 @@ export default function Home() {
                             ? { ...platform, [field]: value }
                             : platform,
                         ),
+                      }))
+                    }
+                    onGACostChange={(stage, key, value) =>
+                      setSettings((current) => ({
+                        ...current,
+                        [stage]: {
+                          ...current[stage],
+                          [key]: value,
+                        },
                       }))
                     }
                     openTeam={() => setView('team')}
@@ -1599,6 +1675,7 @@ function SettingsView({
   settings,
   onChange,
   onPlatformChange,
+  onGACostChange,
   openTeam,
   reset,
 }: {
@@ -1608,6 +1685,11 @@ function SettingsView({
   onPlatformChange: (
     id: PlatformAssumption['id'],
     field: 'salesSharePct' | 'feePct',
+    value: number,
+  ) => void;
+  onGACostChange: (
+    stage: 'prelaunchGACosts' | 'monthlyGACosts',
+    key: keyof PrelaunchGACosts | keyof MonthlyGACosts,
     value: number,
   ) => void;
   openTeam: () => void;
@@ -1743,13 +1825,34 @@ function SettingsView({
               Edit team <ArrowUpRight />
             </MotionButton>
           </div>
-          <SettingField
-            label="General and admin"
-            help="Legal, accounting, insurance, and administrative costs before launch. This is included in the total."
-            value={settings.prelaunchGA}
-            onChange={(value) => onChange('prelaunchGA', value)}
-            prefix="$"
-            step={10}
+          <GACostBreakdown
+            title="Pre-revenue G&A"
+            description="One-time setup costs paid before the game begins earning revenue."
+            total={model.assumptions.prelaunchGA}
+            totalLabel="Total before launch"
+            items={[
+              {
+                key: 'llc',
+                label: 'LLC formation',
+                help: 'One-time cost to form the studio business entity.',
+                value: settings.prelaunchGACosts.llc,
+              },
+              {
+                key: 'steamHosting',
+                label: 'Steam hosting',
+                help: 'The Steam Direct fee required to publish the game.',
+                value: settings.prelaunchGACosts.steamHosting,
+              },
+              {
+                key: 'misc',
+                label: 'Miscellaneous',
+                help: 'Other one-time administrative costs before launch.',
+                value: settings.prelaunchGACosts.misc,
+              },
+            ]}
+            onChange={(key, value) =>
+              onGACostChange('prelaunchGACosts', key, value)
+            }
           />
         </SettingGroup>
 
@@ -1764,14 +1867,6 @@ function SettingsView({
             onChange={(value) => onChange('monthlyDevelopment', value)}
             prefix="$"
             step={50}
-          />
-          <SettingField
-            label="General and admin"
-            help="Recurring monthly legal, accounting, insurance, software, and administrative spending."
-            value={settings.monthlyGA}
-            onChange={(value) => onChange('monthlyGA', value)}
-            prefix="$"
-            step={10}
           />
           <SettingField
             label="Payroll tax"
@@ -1791,6 +1886,41 @@ function SettingsView({
               Edit team <ArrowUpRight />
             </MotionButton>
           </div>
+          <GACostBreakdown
+            title="Monthly G&A"
+            description="Recurring administrative costs applied in every post-launch month."
+            total={model.assumptions.monthlyGA}
+            totalLabel="Total per month"
+            items={[
+              {
+                key: 'legal',
+                label: 'Legal',
+                help: 'Ongoing legal support and routine business filings.',
+                value: settings.monthlyGACosts.legal,
+              },
+              {
+                key: 'software',
+                label: 'Software',
+                help: 'Recurring software, productivity, and administrative subscriptions.',
+                value: settings.monthlyGACosts.software,
+              },
+              {
+                key: 'insurance',
+                label: 'Insurance',
+                help: 'Monthly business insurance expense.',
+                value: settings.monthlyGACosts.insurance,
+              },
+              {
+                key: 'misc',
+                label: 'Miscellaneous',
+                help: 'Other recurring general and administrative costs.',
+                value: settings.monthlyGACosts.misc,
+              },
+            ]}
+            onChange={(key, value) =>
+              onGACostChange('monthlyGACosts', key, value)
+            }
+          />
         </SettingGroup>
 
         <div className="setting-group storefront-settings">
@@ -1955,6 +2085,64 @@ function SettingGroup({
       </div>
       <div className="setting-grid">{children}</div>
     </div>
+  );
+}
+
+function GACostBreakdown<Key extends string>({
+  title,
+  description,
+  total,
+  totalLabel,
+  items,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  total: number;
+  totalLabel: string;
+  items: Array<{ key: Key; label: string; help: string; value: number }>;
+  onChange: (key: Key, value: number) => void;
+}) {
+  return (
+    <details className="ga-breakdown">
+      <summary>
+        <span className="ga-breakdown-title">
+          <span>
+            <strong>{title}</strong>
+            <small>{description}</small>
+          </span>
+        </span>
+        <span className="ga-breakdown-total">
+          <small>{totalLabel}</small>
+          <strong>{money.format(total)}</strong>
+        </span>
+        <span className="ga-breakdown-action">
+          Edit breakdown <ChevronDown />
+        </span>
+      </summary>
+      <div className="ga-breakdown-body">
+        <div className="ga-line-items">
+          {items.map((item) => (
+            <SettingField
+              key={item.key}
+              label={item.label}
+              help={item.help}
+              value={item.value}
+              onChange={(value) => onChange(item.key, value)}
+              prefix="$"
+              step={5}
+            />
+          ))}
+        </div>
+        <div className="ga-total-row">
+          <span>
+            <strong>{totalLabel}</strong>
+            <small>Calculated automatically from the items above.</small>
+          </span>
+          <strong>{money.format(total)}</strong>
+        </div>
+      </div>
+    </details>
   );
 }
 

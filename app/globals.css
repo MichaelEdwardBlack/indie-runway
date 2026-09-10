@@ -1649,6 +1649,121 @@ button {
   border-radius: 8px;
   font-size: 11px;
 }
+.ga-breakdown {
+  grid-column: 1/-1;
+  overflow: hidden;
+  border: 1px solid #dbe5df;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #fbfdfc, #f4f8f5);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.ga-breakdown[open] {
+  border-color: #a9cdbb;
+  box-shadow: 0 12px 30px #173d2f0d;
+}
+.ga-breakdown > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  min-height: 72px;
+  padding: 13px 15px;
+  cursor: pointer;
+  list-style: none;
+}
+.ga-breakdown > summary::-webkit-details-marker {
+  display: none;
+}
+.ga-breakdown-title strong,
+.ga-breakdown-title small,
+.ga-breakdown-total strong,
+.ga-breakdown-total small {
+  display: block;
+}
+.ga-breakdown-title strong {
+  color: #233e33;
+  font-size: 13px;
+}
+.ga-breakdown-title small {
+  margin-top: 4px;
+  color: #687870;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.ga-breakdown-total {
+  min-width: 105px;
+  text-align: right;
+}
+.ga-breakdown-total small {
+  color: #718078;
+  font-size: 10px;
+}
+.ga-breakdown-total strong {
+  margin-top: 3px;
+  color: #174c3a;
+  font: 650 15px var(--font-geist-mono);
+}
+.ga-breakdown-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid #d4e1da;
+  border-radius: 9px;
+  background: #fff;
+  color: #315b49;
+  font-size: 11px;
+  font-weight: 750;
+}
+.ga-breakdown-action svg {
+  width: 14px;
+  transition: transform 180ms ease;
+}
+.ga-breakdown[open] .ga-breakdown-action svg {
+  transform: rotate(180deg);
+}
+.ga-breakdown-body {
+  padding: 4px 15px 15px;
+  border-top: 1px solid #e3ebe6;
+}
+.ga-line-items {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  padding-top: 13px;
+}
+.ga-line-items .setting-field {
+  background: #fff;
+}
+.ga-total-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 10px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: #e7f2eb;
+}
+.ga-total-row span strong,
+.ga-total-row span small {
+  display: block;
+}
+.ga-total-row span strong {
+  color: #285440;
+  font-size: 11px;
+}
+.ga-total-row span small {
+  margin-top: 2px;
+  color: #62776c;
+  font-size: 10px;
+}
+.ga-total-row > strong {
+  color: #174c3a;
+  font: 650 15px var(--font-geist-mono);
+}
 .info-tip {
   position: relative;
   display: inline-grid;
@@ -2187,12 +2302,41 @@ button {
     .settings-summary > span,
     .setting-field,
     .fixed-setting,
+    .ga-breakdown,
     .rules-grid article
   ) {
   border-color: #353c52;
   background: #161c33;
   color: #fff;
   box-shadow: 0 12px 36px #0000002b;
+}
+.theme-going-indie .ga-breakdown[open] {
+  border-color: #41658b;
+}
+.theme-going-indie .ga-breakdown-title strong,
+.theme-going-indie .ga-breakdown-total strong,
+.theme-going-indie .ga-total-row > strong,
+.theme-going-indie .ga-total-row span strong {
+  color: #f4f7ff;
+}
+.theme-going-indie .ga-breakdown-title small,
+.theme-going-indie .ga-breakdown-total small,
+.theme-going-indie .ga-total-row span small {
+  color: #aeb9c8;
+}
+.theme-going-indie .ga-breakdown-action {
+  border-color: #3d4965;
+  background: #202840;
+  color: #dceaff;
+}
+.theme-going-indie .ga-breakdown-body {
+  border-color: #30384e;
+}
+.theme-going-indie .ga-line-items .setting-field {
+  background: #11172a;
+}
+.theme-going-indie .ga-total-row {
+  background: #202944;
 }
 .theme-going-indie .metric-card:hover,
 .theme-going-indie .insight-card:hover {
@@ -2421,6 +2565,9 @@ button {
     height: 330px;
   }
   .setting-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ga-line-items {
     grid-template-columns: 1fr 1fr;
   }
   .team-member-fields {
@@ -2673,6 +2820,15 @@ button {
   .settings-summary,
   .setting-grid {
     grid-template-columns: 1fr 1fr;
+  }
+  .ga-breakdown > summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .ga-breakdown-action {
+    grid-column: 1/-1;
+    justify-self: stretch;
+    justify-content: center;
   }
   .storefront-head,
   .storefront-setting {
