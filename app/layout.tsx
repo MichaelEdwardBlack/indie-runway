@@ -12,6 +12,10 @@ export const metadata: Metadata = {
   title: 'Indie Runway — Studio Financial Planner',
   description:
     'Model your indie studio’s runway, launch, and financial future.',
+  icons: {
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
+    shortcut: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

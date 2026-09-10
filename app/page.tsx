@@ -20,6 +20,7 @@ import {
   LockOpen,
   Palette,
   Play,
+  Plus,
   Rocket,
   Settings2,
   Sparkles,
@@ -86,6 +87,18 @@ type ScenarioSettings = Pick<
   ModelAssumptions,
   NumericSettingKey | 'platforms' | 'team'
 >;
+type ScenarioValues = {
+  price: number;
+  launchUnits: number;
+  decline: number;
+  settings: ScenarioSettings;
+};
+type LocalScenario = ScenarioValues & {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+};
 
 const numericSettingParams: Array<[NumericSettingKey, string]> = [
   ['startingCapital', 'capital'],
@@ -111,6 +124,45 @@ const defaultScenarioSettings = (): ScenarioSettings => ({
   team: DEFAULT_ASSUMPTIONS.team.map((member) => ({ ...member })),
   platforms: DEFAULT_ASSUMPTIONS.platforms.map((platform) => ({ ...platform })),
 });
+const SCENARIOS_STORAGE_KEY = 'indie-runway-scenarios-v1';
+const ACTIVE_SCENARIO_STORAGE_KEY = 'indie-runway-active-scenario';
+const LEGACY_DRAFT_STORAGE_KEY = 'indie-runway-draft';
+
+const cloneSettings = (settings: ScenarioSettings): ScenarioSettings => ({
+  ...settings,
+  team: settings.team.map((member) => ({ ...member })),
+  platforms: settings.platforms.map((platform) => ({ ...platform })),
+});
+
+const normalizeSettings = (
+  settings?: Partial<ScenarioSettings>,
+): ScenarioSettings => ({
+  ...defaultScenarioSettings(),
+  ...settings,
+  team: settings?.team
+    ? settings.team.map((member) => ({ ...member }))
+    : defaultScenarioSettings().team,
+  platforms: settings?.platforms
+    ? settings.platforms.map((platform) => ({ ...platform }))
+    : defaultScenarioSettings().platforms,
+});
+
+const makeScenario = (
+  name: string,
+  values?: Partial<ScenarioValues>,
+): LocalScenario => {
+  const now = Date.now();
+  return {
+    id: globalThis.crypto?.randomUUID?.() ?? `scenario-${now}`,
+    name,
+    price: values?.price ?? DEFAULT_ASSUMPTIONS.gamePrice,
+    launchUnits: values?.launchUnits ?? DEFAULT_ASSUMPTIONS.monthOneUnitSales,
+    decline: values?.decline ?? DEFAULT_ASSUMPTIONS.monthlySalesDeclinePct,
+    settings: normalizeSettings(values?.settings),
+    createdAt: now,
+    updatedAt: now,
+  };
+};
 
 const views = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -169,29 +221,74 @@ export default function Home() {
   const [shared, setShared] = useState(false);
   const [scenarioOpen, setScenarioOpen] = useState(false);
   const [visualTheme, setVisualTheme] = useState<VisualTheme>('runway');
+  const [scenarios, setScenarios] = useState<LocalScenario[]>([]);
+  const [activeScenarioId, setActiveScenarioId] = useState('');
+  const [scenarioName, setScenarioName] = useState("Cam's baseline");
+  const [deleteScenarioId, setDeleteScenarioId] = useState<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const raw = window.localStorage.getItem('indie-runway-draft');
-    let draft: {
+    const legacyRaw = window.localStorage.getItem(LEGACY_DRAFT_STORAGE_KEY);
+    let legacyDraft: {
       price?: number;
       launchUnits?: number;
       decline?: number;
       settings?: Partial<ScenarioSettings>;
     } = {};
     try {
-      draft = raw ? JSON.parse(raw) : {};
+      legacyDraft = legacyRaw ? JSON.parse(legacyRaw) : {};
     } catch {}
-    const nextPrice = Number(params.get('price')) || draft.price || 20;
-    const nextUnits = Number(params.get('units')) || draft.launchUnits || 3000;
-    const nextDecline = Number(params.get('decline')) || draft.decline || 15;
+
+    let storedScenarios: LocalScenario[] = [];
+    try {
+      const stored = JSON.parse(
+        window.localStorage.getItem(SCENARIOS_STORAGE_KEY) ?? '[]',
+      ) as LocalScenario[];
+      if (Array.isArray(stored)) {
+        storedScenarios = stored
+          .filter((scenario) => scenario?.id && scenario?.name)
+          .map((scenario) => ({
+            ...scenario,
+            settings: normalizeSettings(scenario.settings),
+          }));
+      }
+    } catch {}
+
+    if (storedScenarios.length === 0) {
+      storedScenarios = [
+        makeScenario("Cam's baseline", {
+          price: legacyDraft.price,
+          launchUnits: legacyDraft.launchUnits,
+          decline: legacyDraft.decline,
+          settings: normalizeSettings(legacyDraft.settings),
+        }),
+      ];
+    }
+
+    const storedActiveId = window.localStorage.getItem(
+      ACTIVE_SCENARIO_STORAGE_KEY,
+    );
+    const activeScenario =
+      storedScenarios.find((scenario) => scenario.id === storedActiveId) ??
+      storedScenarios[0];
+    let nextPrice = activeScenario.price;
+    let nextUnits = activeScenario.launchUnits;
+    let nextDecline = activeScenario.decline;
+    let nextName = activeScenario.name;
     const savedTheme = window.localStorage.getItem('indie-runway-theme');
-    const nextSettings = {
-      ...defaultScenarioSettings(),
-      ...draft.settings,
-      team: draft.settings?.team ?? defaultScenarioSettings().team,
-      platforms:
-        draft.settings?.platforms ?? defaultScenarioSettings().platforms,
-    };
+    const nextSettings = normalizeSettings(activeScenario.settings);
+    const sharedPrice = Number(params.get('price'));
+    const sharedUnits = Number(params.get('units'));
+    const sharedDecline = Number(params.get('decline'));
+    if (params.has('price') && Number.isFinite(sharedPrice)) {
+      nextPrice = sharedPrice;
+    }
+    if (params.has('units') && Number.isFinite(sharedUnits)) {
+      nextUnits = sharedUnits;
+    }
+    if (params.has('decline') && Number.isFinite(sharedDecline)) {
+      nextDecline = sharedDecline;
+    }
+    if (params.get('scenario')) nextName = params.get('scenario')!;
     const sharedTeam = params.get('team');
     if (sharedTeam) {
       try {
@@ -224,10 +321,18 @@ export default function Home() {
       setLaunchUnits(nextUnits);
       setDecline(nextDecline);
       setSettings(nextSettings);
+      setScenarios(storedScenarios);
+      setActiveScenarioId(activeScenario.id);
+      setScenarioName(nextName);
       if (savedTheme === 'going-indie' || savedTheme === 'runway') {
         setVisualTheme(savedTheme);
       }
     });
+    window.localStorage.setItem(
+      SCENARIOS_STORAGE_KEY,
+      JSON.stringify(storedScenarios),
+    );
+    window.localStorage.setItem(ACTIVE_SCENARIO_STORAGE_KEY, activeScenario.id);
   }, []);
   const model = useMemo(
     () =>
@@ -240,19 +345,124 @@ export default function Home() {
     [price, launchUnits, decline, settings],
   );
   const copy = viewCopy[view];
+  const activeScenario = scenarios.find(
+    (scenario) => scenario.id === activeScenarioId,
+  );
+  const currentValues = useMemo<ScenarioValues>(
+    () => ({ price, launchUnits, decline, settings }),
+    [price, launchUnits, decline, settings],
+  );
+  const hasUnsavedChanges =
+    !activeScenario ||
+    activeScenario.name !== scenarioName.trim() ||
+    JSON.stringify({
+      price: activeScenario.price,
+      launchUnits: activeScenario.launchUnits,
+      decline: activeScenario.decline,
+      settings: activeScenario.settings,
+    }) !== JSON.stringify(currentValues);
+
+  function persistScenarios(next: LocalScenario[], activeId: string) {
+    window.localStorage.setItem(SCENARIOS_STORAGE_KEY, JSON.stringify(next));
+    window.localStorage.setItem(ACTIVE_SCENARIO_STORAGE_KEY, activeId);
+  }
+
+  function saveCurrentScenario(collection = scenarios) {
+    const now = Date.now();
+    const safeName = scenarioName.trim() || 'Untitled scenario';
+    let next = collection;
+    let nextActiveId = activeScenarioId;
+    if (collection.some((scenario) => scenario.id === activeScenarioId)) {
+      next = collection.map((scenario) =>
+        scenario.id === activeScenarioId
+          ? {
+              ...scenario,
+              ...currentValues,
+              settings: cloneSettings(settings),
+              name: safeName,
+              updatedAt: now,
+            }
+          : scenario,
+      );
+    } else {
+      const scenario = makeScenario(safeName, currentValues);
+      next = [...collection, scenario];
+      nextActiveId = scenario.id;
+    }
+    setScenarios(next);
+    setActiveScenarioId(nextActiveId);
+    setScenarioName(safeName);
+    persistScenarios(next, nextActiveId);
+    window.localStorage.removeItem(LEGACY_DRAFT_STORAGE_KEY);
+    return next;
+  }
+
   function saveDraft() {
-    window.localStorage.setItem(
-      'indie-runway-draft',
-      JSON.stringify({ price, launchUnits, decline, settings }),
-    );
+    saveCurrentScenario();
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2200);
   }
+
+  function switchScenario(id: string) {
+    if (id === activeScenarioId) return;
+    const savedScenarios = hasUnsavedChanges
+      ? saveCurrentScenario()
+      : scenarios;
+    const scenario = savedScenarios.find((item) => item.id === id);
+    if (!scenario) return;
+    setScenarios(savedScenarios);
+    setPrice(scenario.price);
+    setLaunchUnits(scenario.launchUnits);
+    setDecline(scenario.decline);
+    setSettings(cloneSettings(scenario.settings));
+    setScenarioName(scenario.name);
+    setActiveScenarioId(scenario.id);
+    setDeleteScenarioId(null);
+    persistScenarios(savedScenarios, scenario.id);
+  }
+
+  function createScenario() {
+    const savedScenarios = hasUnsavedChanges
+      ? saveCurrentScenario()
+      : scenarios;
+    const scenario = makeScenario(
+      `Scenario ${savedScenarios.length + 1}`,
+      currentValues,
+    );
+    const next = [...savedScenarios, scenario];
+    setScenarios(next);
+    setActiveScenarioId(scenario.id);
+    setScenarioName(scenario.name);
+    setDeleteScenarioId(null);
+    persistScenarios(next, scenario.id);
+  }
+
+  function removeScenario(id: string) {
+    if (scenarios.length <= 1) return;
+    const next = scenarios.filter((scenario) => scenario.id !== id);
+    if (id === activeScenarioId) {
+      const fallback = next[0];
+      setScenarios(next);
+      setPrice(fallback.price);
+      setLaunchUnits(fallback.launchUnits);
+      setDecline(fallback.decline);
+      setSettings(cloneSettings(fallback.settings));
+      setScenarioName(fallback.name);
+      setActiveScenarioId(fallback.id);
+      persistScenarios(next, fallback.id);
+    } else {
+      setScenarios(next);
+      persistScenarios(next, activeScenarioId);
+    }
+    setDeleteScenarioId(null);
+  }
+
   async function shareScenario() {
     const url = new URL(window.location.href);
     url.searchParams.set('price', String(price));
     url.searchParams.set('units', String(launchUnits));
     url.searchParams.set('decline', String(decline));
+    url.searchParams.set('scenario', scenarioName.trim());
     numericSettingParams.forEach(([key, param]) =>
       url.searchParams.set(param, String(settings[key])),
     );
@@ -302,10 +512,14 @@ export default function Home() {
               aria-expanded={scenarioOpen}
               onClick={() => setScenarioOpen((open) => !open)}
             >
-              <span className="status-dot" />
+              <span
+                className={`status-dot ${hasUnsavedChanges ? 'is-dirty' : ''}`}
+              />
               <span className="scenario-copy">
-                <small>Working scenario</small>
-                <strong>Cam&apos;s baseline</strong>
+                <small>
+                  {hasUnsavedChanges ? 'Unsaved changes' : 'Saved locally'}
+                </small>
+                <strong>{scenarioName}</strong>
               </span>
               <motion.span animate={{ rotate: scenarioOpen ? 180 : 0 }}>
                 <ChevronDown size={15} />
@@ -319,9 +533,102 @@ export default function Home() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -5, scale: 0.98 }}
                 >
-                  <small>ACTIVE SCENARIO</small>
-                  <strong>Cam&apos;s baseline</strong>
-                  <span>Autosaved locally on this device.</span>
+                  <div className="scenario-popover-heading">
+                    <div>
+                      <small>LOCAL SCENARIOS</small>
+                      <strong>Manage your plans</strong>
+                    </div>
+                    <span>{scenarios.length} saved</span>
+                  </div>
+                  <label className="scenario-name-field">
+                    <span>Scenario name</span>
+                    <input
+                      value={scenarioName}
+                      maxLength={60}
+                      onChange={(event) => setScenarioName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') saveDraft();
+                      }}
+                    />
+                  </label>
+                  <MotionButton
+                    className="scenario-save-button"
+                    tone="primary"
+                    onClick={saveDraft}
+                  >
+                    {saved ? <Check /> : <CloudUpload />}
+                    {saved
+                      ? 'Saved locally'
+                      : hasUnsavedChanges
+                        ? 'Save changes'
+                        : 'Saved'}
+                  </MotionButton>
+                  <div className="scenario-list-heading">
+                    <span>Saved scenarios</span>
+                    <small>Switching saves your current changes.</small>
+                  </div>
+                  <div className="scenario-list">
+                    {scenarios.map((scenario) => (
+                      <div
+                        className={`scenario-row ${scenario.id === activeScenarioId ? 'is-active' : ''}`}
+                        key={scenario.id}
+                      >
+                        <MotionButton
+                          className="scenario-row-select"
+                          tone="quiet"
+                          onClick={() => switchScenario(scenario.id)}
+                        >
+                          <span className="scenario-row-dot" />
+                          <span>
+                            <strong>{scenario.name}</strong>
+                            <small>
+                              {scenario.id === activeScenarioId
+                                ? 'Currently open'
+                                : 'Saved on this device'}
+                            </small>
+                          </span>
+                          {scenario.id === activeScenarioId && <Check />}
+                        </MotionButton>
+                        {deleteScenarioId === scenario.id ? (
+                          <div className="scenario-delete-confirm">
+                            <MotionButton
+                              tone="soft"
+                              onClick={() => setDeleteScenarioId(null)}
+                            >
+                              Cancel
+                            </MotionButton>
+                            <MotionButton
+                              tone="primary"
+                              onClick={() => removeScenario(scenario.id)}
+                            >
+                              Remove
+                            </MotionButton>
+                          </div>
+                        ) : (
+                          <MotionButton
+                            className="scenario-delete-button"
+                            tone="quiet"
+                            disabled={scenarios.length <= 1}
+                            aria-label={`Remove ${scenario.name}`}
+                            onClick={() => setDeleteScenarioId(scenario.id)}
+                          >
+                            <Trash2 />
+                          </MotionButton>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <MotionButton
+                    className="scenario-create-button"
+                    tone="soft"
+                    onClick={createScenario}
+                  >
+                    <Plus />
+                    New scenario from current plan
+                  </MotionButton>
+                  <p className="scenario-storage-note">
+                    Stored only in this browser. No account or cloud database.
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -364,7 +671,13 @@ export default function Home() {
               onClick={saveDraft}
             >
               {saved ? <CloudCheck /> : <CloudUpload />}
-              <span>{saved ? 'Saved' : 'Save draft'}</span>
+              <span>
+                {saved
+                  ? 'Saved'
+                  : hasUnsavedChanges
+                    ? 'Save scenario'
+                    : 'Saved locally'}
+              </span>
             </MotionButton>
             <MotionButton
               className="share-action"
