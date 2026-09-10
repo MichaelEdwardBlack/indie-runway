@@ -1,15 +1,27 @@
 import type { Metadata } from 'next';
-import { DM_Mono, Manrope } from 'next/font/google';
+import { Geist_Mono, Overpass } from 'next/font/google';
 import './globals.css';
 
-const manrope = Manrope({ variable: '--font-manrope', subsets: ['latin'] });
-const dmMono = DM_Mono({ variable: '--font-dm-mono', subsets: ['latin'], weight: ['400', '500'] });
+const overpass = Overpass({ variable: '--font-overpass', subsets: ['latin'] });
+const geistMono = Geist_Mono({
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+});
 
 export const metadata: Metadata = {
   title: 'Indie Runway — Studio Financial Planner',
-  description: 'Model your indie studio’s runway, launch, and financial future.',
+  description:
+    'Model your indie studio’s runway, launch, and financial future.',
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body className={`${manrope.variable} ${dmMono.variable}`}>{children}</body></html>;
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html lang="en">
+      <body className={`${overpass.variable} ${geistMono.variable}`}>
+        {children}
+      </body>
+    </html>
+  );
 }
